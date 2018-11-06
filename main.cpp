@@ -12,6 +12,9 @@
 #include <opencv2/opencv.hpp>
 
 
+using namespace std;
+using namespace cv;
+
 class MyListener : public royale::IDepthDataListener
 {
 
@@ -65,6 +68,58 @@ public:
 			lensParameters.distortionTangential.first,
 			lensParameters.distortionTangential.second,
 			lensParameters.distortionRadial[2]);
+	}
+
+	// works only with grayscale images!
+	void spreadImage(Mat *pic) {
+		Mat nonZeroMask;
+		double min, max;
+
+		if (!pic->empty()) {
+			// compare depth image against zeroscale to remove zero values (CMP_GT)
+			compare(*pic, Scalar(0, 0, 0, 0), nonZeroMask, CMP_GT);
+
+			minMaxLoc(*pic, &min, &max, NULL, NULL, nonZeroMask);
+
+			// lineare scaling aka. spreading by hand
+			for (int i = 0; i < pic->rows; i++)
+			{
+				for (int j = 0; j < pic->cols; j++)
+				{
+					// only values greater than 0 are non error pixels
+					if (pic->at<uchar>(i, j) > 0) {
+						pic->at<uchar>(i, j) = (pic->at<uchar>(i, j) - min) * (255 / (max - min)); // formular from the lecture XD
+					}
+				}
+			}
+		}
+		else {
+			perror("ImgSpread failed");
+		}
+	}
+
+	void displayImages() {
+		imshow("Gray", grayImage);
+		imshow("Original", zImage);
+
+		if (!zImage.empty()) {
+			spreadImage(&zImage);
+			imshow("AfterSpread", zImage);
+
+			applyColorMap(zImage, zImage, COLORMAP_RAINBOW);
+			imshow("zImage", zImage);
+		}
+		else {
+			perror("zImage Empty");
+		}
+
+		if (!grayImage.empty()) {
+			spreadImage(&grayImage);
+			imshow("AfterSpread", grayImage);
+		}
+		else {
+			perror("GrayImage Empty");
+		}
 	}
 
 private:
