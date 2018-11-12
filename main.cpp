@@ -1,15 +1,13 @@
-/****************************************************************************\
-* Vorlage fuer das Praktikum "Graphische Datenverarbeitung" WS 2018/19
-* FB 03 der Hochschule Niedderrhein
-* Regina Pohle-Froehlich
-*
-* Der Code basiert auf den c++-Beispielen der Bibliothek royale
-\****************************************************************************/
-
 #include <royale.hpp>
 #include <iostream>
 #include <mutex>
 #include <opencv2/opencv.hpp>
+
+#define ENTER 13	// enterkey
+// possible options for parameters
+#define Evaluation 1
+#define RecordVideo 2
+#define PlayVideo 3
 
 
 using namespace std;
@@ -49,6 +47,14 @@ public:
 		undistort(temp, zImage, cameraMatrix, distortionCoefficients);
 		temp = grayImage.clone();
 		undistort(temp, grayImage, cameraMatrix, distortionCoefficients);
+
+		// assignment 5
+		if (mode == RecordVideo || mode == PlayVideo) {
+			if (zVideo.isOpened())
+				zVideo << zImage;		// assingment 5: read zImage into zVideo
+			if (grayVideo.isOpened())
+				grayVideo << grayImage;	// assingment 5: read grayImage into zVideo
+		}
 	}
 
 	void setLensParameters(const royale::LensParameters &lensParameters)
@@ -70,70 +76,158 @@ public:
 			lensParameters.distortionRadial[2]);
 	}
 
-	// works only with grayscale images!
-	void spreadImage(Mat *pic) {
-		Mat nonZeroMask;
-		double min, max;
+	// manual hisogram equalisation (assignment 1)
+	void spreadHistogram(Mat *pic) {
+		Mat zeroFreeMask = Mat::zeros(pic->size(), pic->type());	// initialise empty mask
+		double min = 0.0;
+		double max = 0.0;
 
 		if (!pic->empty()) {
 			// compare depth image against zeroscale to remove zero values (CMP_GT)
-			compare(*pic, Scalar(0, 0, 0, 0), nonZeroMask, CMP_GT);
+			compare(*pic, Scalar(0, 0, 0, 0), zeroFreeMask, CMP_GT);
 
-			minMaxLoc(*pic, &min, &max, NULL, NULL, nonZeroMask);
+			minMaxLoc(*pic, &min, &max, NULL, NULL, zeroFreeMask);
 
-			// lineare scaling aka. spreading by hand
+			// lineare scaling using min and max calculated via minMaxLoc
 			for (int i = 0; i < pic->rows; i++)
 			{
 				for (int j = 0; j < pic->cols; j++)
 				{
-					// only values greater than 0 are non error pixels
+					// exclude pixel value 0
 					if (pic->at<uchar>(i, j) > 0) {
 						pic->at<uchar>(i, j) = (pic->at<uchar>(i, j) - min) * (255 / (max - min)); // formular from the lecture XD
 					}
 				}
 			}
 		}
-		else {
-			perror("ImgSpread failed");
-		}
+		else
+			perror("Hisogramequalisation failed!");
 	}
 
-	void displayImages() {
-		imshow("Gray", grayImage);
-		imshow("Original", zImage);
-
+	// assignment 1
+	void showImage() {
 		if (!zImage.empty()) {
-			spreadImage(&zImage);
-			imshow("AfterSpread", zImage);
-
+			spreadHistogram(&zImage);
 			applyColorMap(zImage, zImage, COLORMAP_RAINBOW);
+
 			imshow("zImage", zImage);
 		}
-		else {
-			perror("zImage Empty");
-		}
+		else
+			perror("Displaying zImage failed!");
 
 		if (!grayImage.empty()) {
-			spreadImage(&grayImage);
+			spreadHistogram(&grayImage);
 			imshow("AfterSpread", grayImage);
 		}
-		else {
-			perror("GrayImage Empty");
+		else
+			perror("Displaying grayImage failed!");
+	}
+
+	// assingment 5
+	void openVideoWriter(Size size, string zName, string grayName, double fps) {
+		zVideo.open(grayName, CV_FOURCC('M', 'J', 'P', 'G'), fps, size, true);
+		grayVideo.open(grayName, CV_FOURCC('M', 'J', 'P', 'G'), fps, size, false);
+	}
+
+	void closeVideoWriter() {
+		if (zVideo.isOpened())
+			zVideo.release();
+
+		if (grayVideo.isOpened())
+			grayVideo.release();
+
+	}
+
+	// assignment 6
+	void openStreamCapture(string zName, string grayName) {
+		zStream.open(zName);
+		grayStream.open(grayName);
+	}
+
+	void closeStreamCapture() {
+		if (zStream.isOpened())
+			zStream.release();
+		if (grayStream.isOpened())
+			grayStream.release();
+	}
+
+
+
+	void showCapture() {
+		// assignment 6: read, grab frames, display
+		if (zStream.isOpened() && grayStream.isOpened()) {
+			namedWindow("deepStream", cv::WINDOW_AUTOSIZE);
+			namedWindow("grayStream", cv::WINDOW_AUTOSIZE);
+#if 1
+			while (zStream.grab() && grayStream.grab()) {
+				Mat z;
+				zStream.retrieve(z);
+				imshow("deepStream", z);
+
+				Mat gray;
+				grayStream.retrieve(gray);
+				imshow("grayStream", gray);
+			}
+#endif
+#if 0 // ugly alternative
+			Mat z;
+			Mat gray;
+			while (zStream.read(z)) {
+				grayStream.read(gray);
+				imshow("deepStream", z);
+				imshow("grayStream", gray);
+				waitKey(100);
+			}
+#endif
 		}
+		else
+			perror("Error Show Capture");
+	}
+
+	// assingment 3 / 4 /5
+	void videoHandler(string prefix, Size size, uint16_t framerate, bool streamCapture) {
+		cout << "Maximum Imagesize is: " << size << endl;
+
+		string zName = prefix + "_deth.avi";
+		string grayName = prefix + "_gray.avi";
+
+		openVideoWriter(size, zName, grayName, framerate);
+
+		if (streamCapture)
+			openStreamCapture(zName, grayName);
+	}
+
+	void setMode(int mode) {
+		this->mode = mode;
 	}
 
 private:
-
 	cv::Mat zImage, grayImage;
 	cv::Mat cameraMatrix, distortionCoefficients;
 	std::mutex flagMutex;
+
+	// assignment 4 / 5
+	VideoWriter zVideo;
+	VideoWriter grayVideo;
+
+	// assigment 6
+	VideoCapture zStream;
+	VideoCapture grayStream;
+
+	// parameter for program
+	// 1: evalution
+	// 2: record video
+	// 3: play video
+	int mode;
 };
 
 int main(int argc, char *argv[])
 {
 	MyListener listener;
 
-	// this represents the main camera device object
+	string prefix;	// assignment 4 / 6
+
+					// this represents the main camera device object
 	std::unique_ptr<royale::ICameraDevice> cameraDevice;
 
 	// the camera manager will query for a connected camera
@@ -202,6 +296,51 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	uint16_t width, height, framerate;
+	cameraDevice->getMaxSensorWidth(width);
+	cameraDevice->getMaxSensorHeight(height);
+	cameraDevice->getMaxFrameRate(framerate);
+
+	Size size = Size(width, height);
+
+	// assingment 3 /4 / 6
+	// input via modified properties through argc and argv
+	if (argc > 1) {
+		// assignment 3
+		switch (stoi(argv[1])) {
+		case Evaluation: // assignemtn 3: if 1 then print message "data evaluation"
+			cout << "Call of evaluation method" << endl;
+			listener.setMode(Evaluation);
+			break;
+		case RecordVideo: // assignment 3 / 4: if 2 then record video, read prefix of video file name or take as parameter
+			if (argc == 3) {
+				prefix = argv[2];
+			}
+			else {
+				cout << "Please enter a name for the video file" << endl;
+				cin >> prefix;
+			}
+			listener.setMode(RecordVideo);
+			listener.videoHandler(prefix, size, framerate, false);
+			break;
+		case PlayVideo:	// assignment 6: same as assignment 4 and 5 but dispaly video as well 
+			if (argc == 3) {
+				prefix = argv[2];
+			}
+			else {
+				cout << "Please enter a name for the video file" << endl;
+				cin >> prefix;
+			}
+			listener.setMode(PlayVideo);
+			listener.videoHandler(prefix, size, framerate, true);
+
+			break;
+		default:
+			cout << "DEBUG: No additional parameters passed" << endl;
+		}
+	}
+
+
 	// start capture mode
 	if (cameraDevice->startCapture() != royale::CameraStatus::SUCCESS)
 	{
@@ -209,12 +348,39 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	// stop capture mode
+	// assignment 2: just keep displaying the image until enter has been pressed
+	while (waitKey(0) != ENTER) {}
+
+#if 0 // le grande autismo
+	for (;;)
+	{
+		auto key = waitKey(0);
+		bool keyIsEqualToENTER;
+		if (key == ENTER)
+			keyIsEqualToENTER = true;
+		else
+			keyIsEqualToENTER = false;
+
+		if (keyIsEqualToENTER == true)
+			goto EnterWasPressed;
+	}
+
+EnterWasPressed:
+	// listener.showImage();	// assignment 1
+#endif
+
+			// stop capture mode
+			// assignment 6
+	listener.closeStreamCapture();
+	// assignment 5
+	listener.closeVideoWriter();
+
 	if (cameraDevice->stopCapture() != royale::CameraStatus::SUCCESS)
 	{
 		std::cerr << "Error stopping the capturing" << std::endl;
 		return 1;
 	}
 
+	listener.showImage();	// assignment 1
 	return 0;
 }
