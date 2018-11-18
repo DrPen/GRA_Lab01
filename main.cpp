@@ -1,17 +1,24 @@
+/****************************************************************************\
+* Vorlage fuer das Praktikum "Graphische Datenverarbeitung" WS 2018/19
+* FB 03 der Hochschule Niedderrhein
+* Regina Pohle-Froehlich
+*
+* Der Code basiert auf den c++-Beispielen der Bibliothek royale
+\****************************************************************************/
+
 #include <royale.hpp>
 #include <iostream>
 #include <mutex>
 #include <opencv2/opencv.hpp>
 
-#define ENTER 13	// enterkey
-// possible options for parameters
+#define ENTER 13
 #define Evaluation 1
-#define RecordVideo 2
-#define PlayVideo 3
+#define RECORDVIDEO 2
+#define PLAYVIDEO 3
 
 
-using namespace std;
 using namespace cv;
+using namespace std;
 
 class MyListener : public royale::IDepthDataListener
 {
@@ -48,15 +55,18 @@ public:
 		temp = grayImage.clone();
 		undistort(temp, grayImage, cameraMatrix, distortionCoefficients);
 
+		showImage();
+
 		// assignment 5
-		if (mode == RecordVideo || mode == PlayVideo) {
+		if (mode == RECORDVIDEO) {
 			if (zVideo.isOpened())
 				zVideo << zImage;		// assingment 5: read zImage into zVideo
 			if (grayVideo.isOpened())
-				grayVideo << grayImage;	// assingment 5: read grayImage into zVideo
+				grayVideo << grayImage;	// assingment 5: read grayImage into grayVideo
 		}
+	
 	}
-
+	
 	void setLensParameters(const royale::LensParameters &lensParameters)
 	{
 		// Construct the camera matrix
@@ -77,25 +87,25 @@ public:
 	}
 
 	// manual hisogram equalisation (assignment 1)
-	void spreadHistogram(Mat *pic) {
-		Mat zeroFreeMask = Mat::zeros(pic->size(), pic->type());	// initialise empty mask
+	void spreadHistogram(Mat pic) {
+		Mat zeroFreeMask = Mat::zeros(pic.size(), pic.type());	// initialise empty mask
 		double min = 0.0;
 		double max = 0.0;
 
-		if (!pic->empty()) {
+		if (!pic.empty()) {
 			// compare depth image against zeroscale to remove zero values (CMP_GT)
-			compare(*pic, Scalar(0, 0, 0, 0), zeroFreeMask, CMP_GT);
+			compare(pic, Scalar(0, 0, 0, 0), zeroFreeMask, CMP_GT);
 
-			minMaxLoc(*pic, &min, &max, NULL, NULL, zeroFreeMask);
+			minMaxLoc(pic, &min, &max, NULL, NULL, zeroFreeMask);
 
 			// lineare scaling using min and max calculated via minMaxLoc
-			for (int i = 0; i < pic->rows; i++)
+			for (int i = 0; i < pic.rows; i++)
 			{
-				for (int j = 0; j < pic->cols; j++)
+				for (int j = 0; j < pic.cols; j++)
 				{
 					// exclude pixel value 0
-					if (pic->at<uchar>(i, j) > 0) {
-						pic->at<uchar>(i, j) = (pic->at<uchar>(i, j) - min) * (255 / (max - min)); // formular from the lecture XD
+					if (pic.at<float>(i, j) > 0) {
+						pic.at<float>(i, j) = (pic.at<float>(i, j) - min) * (255 / (max - min)); // formular from the lecture XD
 					}
 				}
 			}
@@ -106,95 +116,91 @@ public:
 
 	// assignment 1
 	void showImage() {
-		if (!zImage.empty()) {
-			spreadHistogram(&zImage);
-			applyColorMap(zImage, zImage, COLORMAP_RAINBOW);
+			if (!zImage.empty()) {
+				spreadHistogram(zImage);
+				zImage.convertTo(zImage, CV_8U);
+				applyColorMap(zImage, zImage, COLORMAP_RAINBOW);
 
-			imshow("zImage", zImage);
-		}
-		else
-			perror("Displaying zImage failed!");
+				imshow("zMeow", zImage);
+			}
+			else {
+				perror("Displaying zImage failed!");
+			}
 
-		if (!grayImage.empty()) {
-			spreadHistogram(&grayImage);
-			imshow("AfterSpread", grayImage);
-		}
-		else
-			perror("Displaying grayImage failed!");
+			if (!grayImage.empty()) {
+				spreadHistogram(grayImage);
+				grayImage.convertTo(grayImage, CV_8U);
+				imshow("grayMeow", grayImage);
+			}
+			else {
+				perror("Displaying grayImage failed!");
+			}
+			waitKey(1);
 	}
 
 	// assingment 5
 	void openVideoWriter(Size size, string zName, string grayName, double fps) {
-		zVideo.open(grayName, CV_FOURCC('M', 'J', 'P', 'G'), fps, size, true);
+		zVideo.open(zName, CV_FOURCC('M', 'J', 'P', 'G'), fps, size, true);
 		grayVideo.open(grayName, CV_FOURCC('M', 'J', 'P', 'G'), fps, size, false);
 	}
 
 	void closeVideoWriter() {
-		if (zVideo.isOpened())
+		if (zVideo.isOpened()) {
 			zVideo.release();
-
-		if (grayVideo.isOpened())
-			grayVideo.release();
-
-	}
-
-	// assignment 6
-	void openStreamCapture(string zName, string grayName) {
-		zStream.open(zName);
-		grayStream.open(grayName);
-	}
-
-	void closeStreamCapture() {
-		if (zStream.isOpened())
-			zStream.release();
-		if (grayStream.isOpened())
-			grayStream.release();
-	}
-
-
-
-	void showCapture() {
-		// assignment 6: read, grab frames, display
-		if (zStream.isOpened() && grayStream.isOpened()) {
-			namedWindow("deepStream", cv::WINDOW_AUTOSIZE);
-			namedWindow("grayStream", cv::WINDOW_AUTOSIZE);
-#if 1
-			while (zStream.grab() && grayStream.grab()) {
-				Mat z;
-				zStream.retrieve(z);
-				imshow("deepStream", z);
-
-				Mat gray;
-				grayStream.retrieve(gray);
-				imshow("grayStream", gray);
-			}
-#endif
-#if 0 // ugly alternative
-			Mat z;
-			Mat gray;
-			while (zStream.read(z)) {
-				grayStream.read(gray);
-				imshow("deepStream", z);
-				imshow("grayStream", gray);
-				waitKey(100);
-			}
-#endif
 		}
-		else
-			perror("Error Show Capture");
+		if (grayVideo.isOpened()) {
+			grayVideo.release();
+		}
+
 	}
 
 	// assingment 3 / 4 /5
 	void videoHandler(string prefix, Size size, uint16_t framerate, bool streamCapture) {
 		cout << "Maximum Imagesize is: " << size << endl;
 
-		string zName = prefix + "_deth.avi";
+		string zName = prefix + "_depth.avi";
 		string grayName = prefix + "_gray.avi";
 
 		openVideoWriter(size, zName, grayName, framerate);
+	}
 
-		if (streamCapture)
-			openStreamCapture(zName, grayName);
+	// assignment 6
+	void openStreamCapture(string *prefix) {
+		zStream.open(*prefix + "_depth.avi");
+		grayStream.open(*prefix + "_gray.avi");
+	}
+
+	void closeStreamCapture() {
+		if (zStream.isOpened()) {
+			zStream.release();
+		}
+		if (grayStream.isOpened()) {
+			grayStream.release();
+		}
+	}
+
+	void showCapture(string prefix, double framerate) {
+		openStreamCapture(&prefix);
+		// assignment 6: read, grab frames, display
+		if (zStream.isOpened() && grayStream.isOpened()) {
+			namedWindow("deepStream", cv::WINDOW_AUTOSIZE);
+			namedWindow("grayStream", cv::WINDOW_AUTOSIZE);
+
+			Mat z;
+			Mat gray;
+			while (zStream.grab() && grayStream.grab()) {
+				zStream.retrieve(z);
+				imshow("deepStream", z);
+
+				grayStream.retrieve(gray);
+				imshow("grayStream", gray);
+				waitKey(framerate*40);
+			}
+		}
+		else {
+			perror("Error Show Capture");
+		}
+		closeStreamCapture();
 	}
 
 	void setMode(int mode) {
@@ -202,32 +208,31 @@ public:
 	}
 
 private:
+	
 	cv::Mat zImage, grayImage;
 	cv::Mat cameraMatrix, distortionCoefficients;
 	std::mutex flagMutex;
-
 	// assignment 4 / 5
 	VideoWriter zVideo;
 	VideoWriter grayVideo;
 
-	// assigment 6
+	// assignment 6
 	VideoCapture zStream;
 	VideoCapture grayStream;
 
 	// parameter for program
-	// 1: evalution
-	// 2: record video
-	// 3: play video
+	// 1: Evaluation
+	// 2: Record Video
+	// 3: Play Video
 	int mode;
 };
 
 int main(int argc, char *argv[])
 {
 	MyListener listener;
+	string prefix;
 
-	string prefix;	// assignment 4 / 6
-
-					// this represents the main camera device object
+	// this represents the main camera device object
 	std::unique_ptr<royale::ICameraDevice> cameraDevice;
 
 	// the camera manager will query for a connected camera
@@ -296,6 +301,16 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	namedWindow("zMeow", CV_WINDOW_AUTOSIZE);
+	namedWindow("grayMeow", CV_WINDOW_AUTOSIZE);
+
+	// start capture mode
+	if (cameraDevice->startCapture() != royale::CameraStatus::SUCCESS)
+	{
+		std::cerr << "Error starting the capturing" << std::endl;
+		return 1;
+	}
+	
 	uint16_t width, height, framerate;
 	cameraDevice->getMaxSensorWidth(width);
 	cameraDevice->getMaxSensorHeight(height);
@@ -312,7 +327,7 @@ int main(int argc, char *argv[])
 			cout << "Call of evaluation method" << endl;
 			listener.setMode(Evaluation);
 			break;
-		case RecordVideo: // assignment 3 / 4: if 2 then record video, read prefix of video file name or take as parameter
+		case RECORDVIDEO: // assignment 3 / 4: if 2 then record video, read prefix of video file name or take as parameter
 			if (argc == 3) {
 				prefix = argv[2];
 			}
@@ -320,10 +335,10 @@ int main(int argc, char *argv[])
 				cout << "Please enter a name for the video file" << endl;
 				cin >> prefix;
 			}
-			listener.setMode(RecordVideo);
+			listener.setMode(RECORDVIDEO);
 			listener.videoHandler(prefix, size, framerate, false);
 			break;
-		case PlayVideo:	// assignment 6: same as assignment 4 and 5 but dispaly video as well 
+		case PLAYVIDEO:	// assignment 6: same as assignment 4 and 5 but dispaly video as well 
 			if (argc == 3) {
 				prefix = argv[2];
 			}
@@ -331,56 +346,23 @@ int main(int argc, char *argv[])
 				cout << "Please enter a name for the video file" << endl;
 				cin >> prefix;
 			}
-			listener.setMode(PlayVideo);
-			listener.videoHandler(prefix, size, framerate, true);
-
+			listener.showCapture(prefix, framerate);
 			break;
 		default:
 			cout << "DEBUG: No additional parameters passed" << endl;
 		}
 	}
 
-
-	// start capture mode
-	if (cameraDevice->startCapture() != royale::CameraStatus::SUCCESS)
-	{
-		std::cerr << "Error starting the capturing" << std::endl;
-		return 1;
+	while (waitKey(0) != ENTER) {
+		// nothing happens here because we are waiting for enter to be pressed
 	}
 
-	// assignment 2: just keep displaying the image until enter has been pressed
-	while (waitKey(0) != ENTER) {}
-
-#if 0 // le grande autismo
-	for (;;)
-	{
-		auto key = waitKey(0);
-		bool keyIsEqualToENTER;
-		if (key == ENTER)
-			keyIsEqualToENTER = true;
-		else
-			keyIsEqualToENTER = false;
-
-		if (keyIsEqualToENTER == true)
-			goto EnterWasPressed;
-	}
-
-EnterWasPressed:
-	// listener.showImage();	// assignment 1
-#endif
-
-			// stop capture mode
-			// assignment 6
-	listener.closeStreamCapture();
-	// assignment 5
-	listener.closeVideoWriter();
-
+	// stop capture mode
 	if (cameraDevice->stopCapture() != royale::CameraStatus::SUCCESS)
 	{
 		std::cerr << "Error stopping the capturing" << std::endl;
 		return 1;
 	}
 
-	listener.showImage();	// assignment 1
 	return 0;
 }
