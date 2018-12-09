@@ -86,6 +86,19 @@ public:
 			lensParameters.distortionRadial[2]);
 	}
 
+	void spreadHistogram(Mat pic) {
+		Mat nonZeroMask = pic.clone();
+		compare(pic, 0, nonZeroMask, CV_CMP_NE);
+
+		double min, max, scale, shift;
+		minMaxLoc(pic, &min, &max, NULL, NULL, nonZeroMask);
+		scale = 255.0 / (max - min);
+		shift = -255.0 * min / (max - min);
+		convertScaleAbs(pic, pic, scale, shift);
+	}
+
+	// old version, does not work properly with 16 bit images
+#if 0
 	// manual hisogram equalisation (assignment 1)
 	void spreadHistogram(Mat pic) {
 		Mat zeroFreeMask = Mat::zeros(pic.size(), pic.type());	// initialise empty mask
@@ -113,6 +126,7 @@ public:
 		else
 			perror("Hisogramequalisation failed!");
 	}
+#endif
 
 	// assignment 1
 	void showImage() {
@@ -155,7 +169,7 @@ public:
 	}
 
 	// assingment 3 / 4 /5
-	void videoHandler(string prefix, Size size, uint16_t framerate, bool streamCapture) {
+	void videoHandler(string prefix, Size size, uint16_t framerate) {
 		cout << "Maximum Imagesize is: " << size << endl;
 
 		string zName = prefix + "_depth.avi";
